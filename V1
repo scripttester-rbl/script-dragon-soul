@@ -1,0 +1,71 @@
+-- Script de Teleporte para Bosses e Auto Loot de Baús em Dragon Soul (Roblox Lua)
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+-- Lista de bosses baseada em guias (nomes exatos dos Humanoids)
+local bosses = {
+    "Farmer", "Cyber", "Turles", "Boku Black", "Ajax", "Yeti King", "Droid 13",
+    "Nash Ketchup", "Pizza Man", "Resurrected Nappu", "Super Pikkon", "Droid 21",
+    "Demon 21", "Maid 21", "Skull Alien", "Azura", "Armored Mayor", "Kataba", "Zuto"
+}
+
+-- Função para teleportar para um boss específico pelo nome
+local function teleportToBoss(bossName)
+    for _, v in pairs(game.Workspace:GetDescendants()) do
+        if v:IsA("Humanoid") and v.Name == bossName then
+            local bossRoot = v.Parent:FindFirstChild("HumanoidRootPart")
+            if bossRoot then
+                hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)  -- Teleporta para frente e acima do boss
+                print("Teleportado para: " .. bossName)
+                return true
+            end
+        end
+    end
+    print("Boss não encontrado: " .. bossName)
+    return false
+end
+
+-- Função para lootar todos os baús (busca por objetos com "Chest" no nome)
+local function lootAllChests()
+    local chests = {}
+    for _, v in pairs(game.Workspace:GetDescendants()) do
+        if v.Name:find("Chest") and (v:IsA("Part") or v:IsA("Model")) then
+            table.insert(chests, v)
+        end
+    end
+    
+    if #chests == 0 then
+        print("Nenhum baú encontrado!")
+        return
+    end
+    
+    print("Encontrados " .. #chests .. " baús. Iniciando loot...")
+    for _, chest in pairs(chests) do
+        local pos = chest:IsA("Model") and chest.PrimaryPart.Position or chest.Position
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))  -- Teleporta acima do baú
+        wait(1.5)  -- Tempo para "tocar" e lootar (ajuste se necessário)
+        print("Lootado baú em: " .. tostring(pos))
+    end
+    print("Loot concluído!")
+end
+
+-- Exemplo de uso: Teleporte para um boss específico (mude o nome)
+-- teleportToBoss("Turles")  -- Descomente para testar
+
+-- Para lootar baús: lootAllChests()  -- Descomente para testar
+
+-- Para tornar interativo (ex: pressione 'B' para menu de bosses, 'L' para loot)
+local userInputService = game:GetService("UserInputService")
+
+userInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.B then  -- Pressione B para escolher boss
+        -- Exemplo simples: Teleporta para o primeiro boss (ou crie um GUI para escolher)
+        teleportToBoss(bosses[math.random(1, #bosses)])  -- Aleatório, ou mude
+    elseif input.KeyCode == Enum.KeyCode.L then  -- Pressione L para loot baús
+        lootAllChests()
+    end
+end)
+
+print("Script carregado! Pressione B para teleport aleatório a boss, L para loot baús.")
