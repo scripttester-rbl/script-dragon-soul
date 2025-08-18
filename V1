@@ -1,5 +1,6 @@
--- Script de Teleporte para Bosses e Auto Loot de Baús em Dragon Soul (Roblox Lua)
-
+-- =========================================================================
+--  CONFIGURAÇÕES
+-- =========================================================================
 local player = game.Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
@@ -11,61 +12,130 @@ local bosses = {
     "Demon 21", "Maid 21", "Skull Alien", "Azura", "Armored Mayor", "Kataba", "Zuto"
 }
 
--- Função para teleportar para um boss específico pelo nome
+-- Variáveis de estado para os toggles
+local autoLootEnabled = false
+local lootThread = nil
+
+-- =========================================================================
+--  FUNÇÕES PRINCIPAIS
+-- =========================================================================
+
+-- Função para teleportar para um boss específico
 local function teleportToBoss(bossName)
     for _, v in pairs(game.Workspace:GetDescendants()) do
         if v:IsA("Humanoid") and v.Name == bossName then
             local bossRoot = v.Parent:FindFirstChild("HumanoidRootPart")
             if bossRoot then
-                hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)  -- Teleporta para frente e acima do boss
-                print("Teleportado para: " .. bossName)
+                hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)
+                player.Chatted:Fire("Teleportado para: " .. bossName)
                 return true
             end
         end
     end
-    print("Boss não encontrado: " .. bossName)
+    player.Chatted:Fire("Boss não encontrado: " .. bossName)
     return false
 end
 
--- Função para lootar todos os baús (busca por objetos com "Chest" no nome)
-local function lootAllChests()
-    local chests = {}
-    for _, v in pairs(game.Workspace:GetDescendants()) do
-        if v.Name:find("Chest") and (v:IsA("Part") or v:IsA("Model")) then
-            table.insert(chests, v)
+-- Função para lootar todos os baús automaticamente
+local function startLootLoop()
+    while autoLootEnabled do
+        local chests = {}
+        for _, v in pairs(game.Workspace:GetDescendants()) do
+            if v and v.Name:find("Chest") and (v:IsA("Part") or v:IsA("Model")) then
+                table.insert(chests, v)
+            end
         end
+
+        if #chests == 0 then
+            player.Chatted:Fire("Nenhum baú encontrado. Aguardando...")
+            task.wait(5) -- Espera antes de tentar novamente
+        else
+            player.Chatted:Fire("Iniciando loot de " .. #chests .. " baús.")
+            for _, chest in pairs(chests) do
+                if not autoLootEnabled then break end -- Verifica se o loot foi desativado
+                
+                if chest and chest.Parent then -- Garante que o baú não foi destruído
+                    local pos = chest:IsA("Model") and chest.PrimaryPart.Position or chest.Position
+                    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+                    task.wait(1.5)
+                    player.Chatted:Fire("Lootado baú em: " .. tostring(pos))
+                end
+            end
+            player.Chatted:Fire("Loot concluído. Aguardando novos baús.")
+            task.wait(5) -- Tempo para respawn de baús
+        end
+        task.wait(1) -- Pequeno delay para evitar sobrecarregar o servidor
     end
-    
-    if #chests == 0 then
-        print("Nenhum baú encontrado!")
-        return
-    end
-    
-    print("Encontrados " .. #chests .. " baús. Iniciando loot...")
-    for _, chest in pairs(chests) do
-        local pos = chest:IsA("Model") and chest.PrimaryPart.Position or chest.Position
-        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))  -- Teleporta acima do baú
-        wait(1.5)  -- Tempo para "tocar" e lootar (ajuste se necessário)
-        print("Lootado baú em: " .. tostring(pos))
-    end
-    print("Loot concluído!")
 end
 
--- Exemplo de uso: Teleporte para um boss específico (mude o nome)
--- teleportToBoss("Turles")  -- Descomente para testar
+-- =========================================================================
+--  INTERFACE GRÁFICA (GUI)
+-- =========================================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Para lootar baús: lootAllChests()  -- Descomente para testar
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 150)
+mainFrame.Position = UDim2.new(0, 10, 0.5, -75)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.BorderSizePixel = 0
+mainFrame.Draggable = true -- Permite arrastar o frame
+mainFrame.Parent = screenGui
 
--- Para tornar interativo (ex: pressione 'B' para menu de bosses, 'L' para loot)
-local userInputService = game:GetService("UserInputService")
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextScaled = true
+title.Text = "Dragon Soul - Teleporte e Loot"
+title.Parent = mainFrame
 
-userInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.B then  -- Pressione B para escolher boss
-        -- Exemplo simples: Teleporta para o primeiro boss (ou crie um GUI para escolher)
-        teleportToBoss(bosses[math.random(1, #bosses)])  -- Aleatório, ou mude
-    elseif input.KeyCode == Enum.KeyCode.L then  -- Pressione L para loot baús
-        lootAllChests()
+local lootToggle = Instance.new("TextButton")
+lootToggle.Size = UDim2.new(1, -20, 0, 30)
+lootToggle.Position = UDim2.new(0, 10, 0, 40)
+lootToggle.Text = "Auto Loot: OFF"
+lootToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+lootToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+lootToggle.Parent = mainFrame
+
+local lootStateLabel = Instance.new("TextLabel")
+lootStateLabel.Size = UDim2.new(1, -20, 0, 20)
+lootStateLabel.Position = UDim2.new(0, 10, 0, 75)
+lootStateLabel.Text = "Status: Parado"
+lootStateLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+lootStateLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+lootStateLabel.Parent = mainFrame
+
+local teleportButton = Instance.new("TextButton")
+teleportButton.Size = UDim2.new(1, -20, 0, 30)
+teleportButton.Position = UDim2.new(0, 10, 0, 105)
+teleportButton.Text = "Teleporte Boss (Aleatório)"
+teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+teleportButton.Parent = mainFrame
+
+-- =========================================================================
+--  EVENTOS DE BOTÕES
+-- =========================================================================
+lootToggle.MouseButton1Click:Connect(function()
+    autoLootEnabled = not autoLootEnabled
+    if autoLootEnabled then
+        lootToggle.Text = "Auto Loot: ON"
+        lootToggle.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        lootStateLabel.Text = "Status: Ativo"
+        lootThread = task.spawn(startLootLoop) -- Inicia o loop em uma nova thread
+    else
+        lootToggle.Text = "Auto Loot: OFF"
+        lootToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        lootStateLabel.Text = "Status: Parado"
+        if lootThread then
+            task.cancel(lootThread) -- Interrompe a thread imediatamente
+        end
     end
 end)
 
-print("Script carregado! Pressione B para teleport aleatório a boss, L para loot baús.")
+teleportButton.MouseButton1Click:Connect(function()
+    local randomIndex = math.random(1, #bosses)
+    teleportToBoss(bosses[randomIndex])
+end)
