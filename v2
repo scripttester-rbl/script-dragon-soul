@@ -1,73 +1,44 @@
 -- =========================================================================
---  SCRIPT DE TELEPORTE, LOOT E AUTO BOSS PARA DRAGON SOUL
---  VERIFICADO PARA INJETORES COMO DELTA
+--  Lógica do cliente
+--  Este script cuida da GUI e envia requisições ao servidor
 -- =========================================================================
 
--- Obtém o jogador e o personagem de forma segura
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
 
--- Lista de bosses (nomes exatos dos Humanoids)
+local TeleportRequest = ReplicatedStorage:WaitForChild("TeleportRequest")
+local LootRequest = ReplicatedStorage:WaitForChild("LootRequest")
+
+local character = player.Character or player.CharacterAdded:Wait()
+
 local bosses = {
     "Farmer", "Cyber", "Turles", "Boku Black", "Ajax", "Yeti King", "Droid 13",
     "Nash Ketchup", "Pizza Man", "Resurrected Nappu", "Super Pikkon", "Droid 21",
     "Demon 21", "Maid 21", "Skull Alien", "Azura", "Armored Mayor", "Kataba", "Zuto"
 }
 
--- Variáveis de estado para os toggles
 local autoLootEnabled = false
 local autoBossEnabled = false
 local lootThread = nil
 local bossThread = nil
-
--- =========================================================================
---  FUNÇÕES PRINCIPAIS
--- =========================================================================
-
--- Função para encontrar um boss pelo nome
-local function findBoss(bossName)
-    for _, v in pairs(game.Workspace:GetDescendants()) do
-        if v:IsA("Humanoid") and v.Name == bossName then
-            return v.Parent
-        end
-    end
-    return nil
-end
-
--- Função para teleportar para um boss específico
-local function teleportToBoss(bossName)
-    local bossModel = findBoss(bossName)
-    if bossModel then
-        local bossRoot = bossModel:FindFirstChild("HumanoidRootPart")
-        if bossRoot then
-            hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)
-            print("Teleportado para: " .. bossName)
-            return true
-        end
-    end
-    print("Boss não encontrado: " .. bossName)
-    return false
-end
 
 -- Função de loop para o Auto Boss
 local function startBossLoop()
     while autoBossEnabled do
         local foundBoss = false
         for _, bossName in ipairs(bosses) do
-            if findBoss(bossName) then
-                print("Boss encontrado: " .. bossName)
-                teleportToBoss(bossName)
+            local bossModel = workspace:FindFirstChild(bossName)
+            if bossModel then
+                TeleportRequest:FireServer(bossName)
                 foundBoss = true
                 break
             end
         end
-
         if not foundBoss then
             print("Nenhum boss encontrado. Esperando...")
         end
-        
-        task.wait(5) -- Tempo para o boss nascer e para não sobrecarregar
+        task.wait(5)
     end
 end
 
@@ -75,40 +46,29 @@ end
 local function startLootLoop()
     while autoLootEnabled do
         local chests = {}
-        for _, v in pairs(game.Workspace:GetDescendants()) do
+        for _, v in pairs(workspace:GetDescendants()) do
             if v and v.Name:find("Chest") and (v:IsA("Part") or v:IsA("Model")) then
                 table.insert(chests, v)
             end
         end
-
-        if #chests == 0 then
-            print("Nenhum baú encontrado. Aguardando...")
-            task.wait(5)
-        else
+        if #chests > 0 then
             print("Iniciando loot de " .. #chests .. " baús.")
             for _, chest in pairs(chests) do
                 if not autoLootEnabled then break end
-                
                 if chest and chest.Parent then
-                    local pos = chest:IsA("Model") and chest.PrimaryPart and chest.PrimaryPart.Position or chest.Position
-                    if pos then
-                        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
-                        task.wait(1.5)
-                        print("Lootado baú em: " .. tostring(pos))
-                    end
+                    LootRequest:FireServer(chest)
+                    task.wait(1.5)
                 end
             end
             print("Loot concluído. Aguardando novos baús.")
-            task.wait(5)
+        else
+            print("Nenhum baú encontrado. Aguardando...")
         end
-        task.wait(1)
+        task.wait(5)
     end
 end
 
--- =========================================================================
---  INTERFACE GRÁFICA (GUI)
--- =========================================================================
--- Evita a criação de GUI duplicada
+-- GUI e Eventos (o mesmo código que você já tinha, mas agora com as chamadas corretas)
 local screenGui = player:WaitForChild("PlayerGui"):FindFirstChild("CustomTeleportGUI")
 if not screenGui then
     screenGui = Instance.new("ScreenGui")
@@ -116,16 +76,14 @@ if not screenGui then
     screenGui.Parent = player:WaitForChild("PlayerGui")
 end
 
--- Criação do Frame principal (a janela que pode ser movida)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 200) -- Aumenta o tamanho para caber um novo botão
-mainFrame.Position = UDim2.new(0.5, -100, 0.5, -100) -- Centraliza a janela
+mainFrame.Size = UDim2.new(0, 200, 0, 200)
+mainFrame.Position = UDim2.new(0.5, -100, 0.5, -100)
 mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
--- Criação do título
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.Position = UDim2.new(0, 0, 0, 0)
@@ -135,7 +93,6 @@ title.TextScaled = true
 title.Text = "Dragon Soul - HACK"
 title.Parent = mainFrame
 
--- Criação do botão de toggle de Auto Loot
 local lootToggle = Instance.new("TextButton")
 lootToggle.Size = UDim2.new(1, -20, 0, 30)
 lootToggle.Position = UDim2.new(0, 10, 0, 40)
@@ -144,7 +101,6 @@ lootToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 lootToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 lootToggle.Parent = mainFrame
 
--- Criação do botão de toggle de Auto Boss
 local bossToggle = Instance.new("TextButton")
 bossToggle.Size = UDim2.new(1, -20, 0, 30)
 bossToggle.Position = UDim2.new(0, 10, 0, 80)
@@ -153,7 +109,6 @@ bossToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 bossToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 bossToggle.Parent = mainFrame
 
--- Criação do label de status do loot
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -20, 0, 20)
 statusLabel.Position = UDim2.new(0, 10, 0, 120)
@@ -162,7 +117,6 @@ statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 statusLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 statusLabel.Parent = mainFrame
 
--- Criação do botão de teleporte para boss aleatório
 local teleportButton = Instance.new("TextButton")
 teleportButton.Size = UDim2.new(1, -20, 0, 30)
 teleportButton.Position = UDim2.new(0, 10, 0, 150)
@@ -171,9 +125,6 @@ teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 teleportButton.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
 teleportButton.Parent = mainFrame
 
--- =========================================================================
---  EVENTOS DE BOTÕES E INTERATIVIDADE
--- =========================================================================
 lootToggle.MouseButton1Click:Connect(function()
     autoLootEnabled = not autoLootEnabled
     if autoLootEnabled then
@@ -183,7 +134,6 @@ lootToggle.MouseButton1Click:Connect(function()
             bossToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
             if bossThread and coroutine.status(bossThread) ~= "dead" then task.cancel(bossThread) end
         end
-
         lootToggle.Text = "Auto Loot: ON"
         lootToggle.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         statusLabel.Text = "Status: Auto Loot Ativo"
@@ -205,7 +155,6 @@ bossToggle.MouseButton1Click:Connect(function()
             lootToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
             if lootThread and coroutine.status(lootThread) ~= "dead" then task.cancel(lootThread) end
         end
-
         bossToggle.Text = "Auto Boss: ON"
         bossToggle.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         statusLabel.Text = "Status: Auto Boss Ativo"
@@ -220,5 +169,5 @@ end)
 
 teleportButton.MouseButton1Click:Connect(function()
     local randomIndex = math.random(1, #bosses)
-    teleportToBoss(bosses[randomIndex])
+    TeleportRequest:FireServer(bosses[randomIndex])
 end)
