@@ -1,11 +1,12 @@
 -- =========================================================================
 --  CONFIGURAÇÕES
 -- =========================================================================
+-- Obtenha o jogador e o personagem de forma segura
 local player = game.Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 
--- Lista de bosses baseada em guias (nomes exatos dos Humanoids)
+-- Lista de bosses (nomes exatos dos Humanoids)
 local bosses = {
     "Farmer", "Cyber", "Turles", "Boku Black", "Ajax", "Yeti King", "Droid 13",
     "Nash Ketchup", "Pizza Man", "Resurrected Nappu", "Super Pikkon", "Droid 21",
@@ -20,20 +21,26 @@ local lootThread = nil
 --  FUNÇÕES PRINCIPAIS
 -- =========================================================================
 
--- Função para teleportar para um boss específico
+-- Função para teleportar para um boss
 local function teleportToBoss(bossName)
-    for _, v in pairs(game.Workspace:GetDescendants()) do
-        if v:IsA("Humanoid") and v.Name == bossName then
-            local bossRoot = v.Parent:FindFirstChild("HumanoidRootPart")
-            if bossRoot then
-                hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)
-                player.Chatted:Fire("Teleportado para: " .. bossName)
-                return true
+    local success, result = pcall(function()
+        for _, v in pairs(game.Workspace:GetDescendants()) do
+            if v:IsA("Humanoid") and v.Name == bossName then
+                local bossRoot = v.Parent:FindFirstChild("HumanoidRootPart")
+                if bossRoot then
+                    hrp.CFrame = bossRoot.CFrame * CFrame.new(0, 5, -10)
+                    return true
+                end
             end
         end
+        return false
+    end)
+
+    if success and result then
+        print("Teleportado para: " .. bossName)
+    else
+        print("Boss não encontrado ou erro: " .. bossName)
     end
-    player.Chatted:Fire("Boss não encontrado: " .. bossName)
-    return false
 end
 
 -- Função para lootar todos os baús automaticamente
@@ -47,39 +54,48 @@ local function startLootLoop()
         end
 
         if #chests == 0 then
-            player.Chatted:Fire("Nenhum baú encontrado. Aguardando...")
-            task.wait(5) -- Espera antes de tentar novamente
+            print("Nenhum baú encontrado. Aguardando...")
+            task.wait(5)
         else
-            player.Chatted:Fire("Iniciando loot de " .. #chests .. " baús.")
+            print("Iniciando loot de " .. #chests .. " baús.")
             for _, chest in pairs(chests) do
-                if not autoLootEnabled then break end -- Verifica se o loot foi desativado
+                if not autoLootEnabled then break end
                 
-                if chest and chest.Parent then -- Garante que o baú não foi destruído
-                    local pos = chest:IsA("Model") and chest.PrimaryPart.Position or chest.Position
-                    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
-                    task.wait(1.5)
-                    player.Chatted:Fire("Lootado baú em: " .. tostring(pos))
+                -- Verificação extra antes de usar a variável
+                if chest and chest.Parent then
+                    local pos = chest:IsA("Model") and chest.PrimaryPart and chest.PrimaryPart.Position or chest.Position
+                    if pos then
+                        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+                        task.wait(1.5)
+                        print("Lootado baú em: " .. tostring(pos))
+                    end
                 end
             end
-            player.Chatted:Fire("Loot concluído. Aguardando novos baús.")
-            task.wait(5) -- Tempo para respawn de baús
+            print("Loot concluído. Aguardando novos baús.")
+            task.wait(5)
         end
-        task.wait(1) -- Pequeno delay para evitar sobrecarregar o servidor
+        task.wait(1)
     end
 end
 
 -- =========================================================================
 --  INTERFACE GRÁFICA (GUI)
 -- =========================================================================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = player:WaitForChild("PlayerGui")
+-- Evitar criar GUI duplicada
+local screenGui = player:WaitForChild("PlayerGui"):FindFirstChild("CustomTeleportGUI")
+if not screenGui then
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "CustomTeleportGUI"
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+end
 
+-- Criação do Frame e botões
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 200, 0, 150)
 mainFrame.Position = UDim2.new(0, 10, 0.5, -75)
 mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 mainFrame.BorderSizePixel = 0
-mainFrame.Draggable = true -- Permite arrastar o frame
+mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
@@ -124,13 +140,13 @@ lootToggle.MouseButton1Click:Connect(function()
         lootToggle.Text = "Auto Loot: ON"
         lootToggle.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         lootStateLabel.Text = "Status: Ativo"
-        lootThread = task.spawn(startLootLoop) -- Inicia o loop em uma nova thread
+        lootThread = task.spawn(startLootLoop)
     else
         lootToggle.Text = "Auto Loot: OFF"
         lootToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         lootStateLabel.Text = "Status: Parado"
-        if lootThread then
-            task.cancel(lootThread) -- Interrompe a thread imediatamente
+        if lootThread and coroutine.status(lootThread) ~= "dead" then
+            task.cancel(lootThread)
         end
     end
 end)
